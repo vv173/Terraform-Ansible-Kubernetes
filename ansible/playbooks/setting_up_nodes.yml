@@ -1,0 +1,103 @@
+---
+- hosts: all
+  become: yes
+  vars_files:
+  - env_variables
+
+  tasks:
+  - name: Update apt-get repo and cache
+    apt: update_cache=yes force_apt_get=yes
+
+# Kubernetes Repo
+
+  - name: Add an apt signing key for Kubernetes
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      state: present
+
+  - name: Adding apt repository for Kubernetes
+    apt_repository:
+      repo: deb https://apt.kubernetes.io/kubernetes-xenial main
+      state: present
+      filename: kubernetes
+
+# Docker installation
+
+  - name: Install packages that allow apt to be used over HTTPS
+    apt:
+      name: "{{ https_packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      https_packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+
+  - name: Add an apt signing key for Docker
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Add apt repository for stable version
+    apt_repository:
+      repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable
+      state: present
+
+  - name: Install docker and its dependecies
+    apt:
+      name: "{{ docker_packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      docker_packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+
+#Installing firewalld
+
+  - name: Installing firewalld
+    apt:
+      name: firewalld
+      state: present
+      update_cache: yes
+
+#Installing kubeadm, kubectl
+
+  - name: Installing required packages
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+
+  - name: Starting and Enabling the required services
+    service:
+      name: "{{ item }}"
+      state: started
+      enabled: yes
+    with_items: "{{ services }}"
+
+  - name: Allow Network Ports in Firewalld
+    iptables:
+      chain: INPUT
+      policy: ACCEPT
+      protocol: all
+      destination_port: "{{ item }}"
+      state: present
+
+    with_items: "{{ master_ports if ('kubernetes_master_nodes' in group_names) else worker_ports }}"
+
+  - name: Allow masquerading in Firewalld
+    iptables:
+      chain: POSTROUTING
+      jump: MASQUERADE
+      out_interface: eth0
+      state: present
+      permanent: yes
+      immediate: yes
+
+  - name: Enabling Bridge Firewall Rule
+    shell: "echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables"

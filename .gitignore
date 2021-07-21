@@ -1,0 +1,5 @@
+terraform.tfstate*
+secrets.auto.tfvars
+.terraform.lock.hcl
+.terraform*
+ansible/playbooks/join_token
